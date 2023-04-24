@@ -1,5 +1,5 @@
 
-function muscleFibreAnalysis(aImarisApplicationID)
+function muscleFibreAnalysis_for_review(aImarisApplicationID, demo_data_path)
 %
 % function muscleFibreAnalysis(aImarisApplicationID)
 %
@@ -65,6 +65,9 @@ function muscleFibreAnalysis(aImarisApplicationID)
 % Note that the code for aligning the sample to the longitudinal axis is 
 % based on: 'Kin Sung Chan (2023). Align/Rotate Point Cloud Along Z 
 % direction based on PCA, MATLAB Central File Exchange. April 21, 2023.'
+%
+% Online documentation for the project:
+% https://alumni-my.sharepoint.com/:w:/g/personal/tmj555_ku_dk/EdZmaiEQ_mhMjfABJxJKGfABR6Zz-X5M_3gOBgFgEvpOiw?e=nbzaXn
 % ---------------------------------------------------------
 %
 %   Imaris header (compulsory for the plugin to be added to the menu):
@@ -86,6 +89,183 @@ function muscleFibreAnalysis(aImarisApplicationID)
 %      </SurpassTab> 
 %    </CustomTools> 
 %
+
+
+
+%% For debugging only
+show_interm_figures = 0;
+debugging           = 0;
+
+
+
+%% If used for code review, the input argument is the path to the folder with
+%  the mat file including test data
+if isempty(aImarisApplicationID)
+    load(fullfile(demo_data_path, 'demo_data.mat'));
+else
+    %%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Set up connection between Imaris and MATLAB and get data
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    
+    % The Imaris server object should be passed to the plugin by Imaris. If
+    % that didn't work somehow, look for the object
+    if isa(aImarisApplicationID, 'Imaris.IApplicationPrxHelper')
+        vImarisApplication = aImarisApplicationID;
+    else
+        % Connect to Imaris interface
+        javaaddpath ImarisLib.jar
+        vImarisLib = ImarisLib;
+        if ischar(aImarisApplicationID)
+            aImarisApplicationID = round(str2double(aImarisApplicationID));
+        end
+        vImarisApplication = vImarisLib.GetApplication(aImarisApplicationID);
+    end
+    
+    
+    % Get the Surfaces (ISurface objects in Imaris), volumes (IVolume objects 
+    % in Imaris) and spots (ISpots objects in Imaris)
+    surfaces    = {};   spots       = {};   volumes = {}; 
+    nSurfaces   = 0;    nVolumes    = 0;    nSpots  = 0;
+    
+    % Get current scene objects from Imaris and find out what we got
+    nChildren = vImarisApplication.GetSurpassScene().GetNumberOfChildren();
+    for i = 0 : (nChildren - 1)
+        child = vImarisApplication.GetSurpassScene.GetChild( i );
+        if vImarisApplication.GetFactory().IsSurfaces(child)
+            nSurfaces = nSurfaces + 1;
+            % We must cast the child to a Surfaces object!
+            surfaces{nSurfaces} = ...
+                vImarisApplication.GetFactory().ToSurfaces(child);
+        end
+        if vImarisApplication.GetFactory().IsVolume(child)
+            nVolumes = nVolumes + 1;
+            % We must cast the child to a Volume object!
+            volumes{nVolumes} = ...
+                vImarisApplication.GetFactory().ToVolume(child);
+        end 
+        if vImarisApplication.GetFactory().IsSpots(child)
+            nSpots = nSpots + 1;
+            % We must cast the child to a Spots object!        
+            spots{nSpots} = ...
+                vImarisApplication.GetFactory().ToSpots(child);
+        end
+    end
+    
+    
+    
+    %% The spots represent the nuclei. Get their Centers of Gravity (CoGs)
+    CoGs = spots{1}.GetPositionsXYZ;
+    
+    % Get all spot class labels
+    % IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
+    %   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
+    %   plugin cannot distinguish between the two otherwise. 
+    tmp          = spots{1}.GetLabels;
+    class_labels = cell(size(CoGs, 1), 1);
+    CoGs_inside  = [];  % Class A
+    CoGs_outside = [];  % Class B
+    
+    for CoG_cnt = 1:size(CoGs, 1)
+        class_labels{CoG_cnt} = tmp(CoG_cnt).mLabelValue;
+    
+        if strcmp(tmp(CoG_cnt).mLabelValue, 'Class A')
+            CoGs_inside  = [CoGs_inside; CoGs(CoG_cnt,:)];
+        elseif strcmp(tmp(CoG_cnt).mLabelValue, 'Class B')
+            CoGs_outside = [CoGs_outside; CoGs(CoG_cnt,:)];
+        else
+            error('Class label not know. Has to be ''Class A'' for spots inside and ''Class B'' for spots outside the fiber.' );
+        end
+    end
+    
+    
+    
+    %% Extract actual surface from Imaris ISurface object
+    cur_surface     = surfaces{1};                          % ISurface
+    % Get surface data (note that we need to use Java indexing now...)
+    cur_surf_data   = cur_surface.GetSurfaceData(0);        % IDataSet
+    % Get surface dimensions
+    surface_layout  = cur_surface.GetSurfaceDataLayout(0);
+    % Generate mask from data
+    surf_mask       = cur_surface.GetMask(surface_layout.mExtendMinX, ...
+                                          surface_layout.mExtendMinY, ...
+                                          surface_layout.mExtendMinZ, ...
+                                          surface_layout.mExtendMaxX, ...
+                                          surface_layout.mExtendMaxY, ...
+                                          surface_layout.mExtendMaxZ, ...
+                                          surface_layout.mSizeX, ...
+                                          surface_layout.mSizeY, ...
+                                          surface_layout.mSizeZ, ...
+                                          0);               % IDataSet
+    
+    % Get the actual data out of the IDataSet object... 
+    % ... first get the dataset class ...
+    switch char(cur_surf_data.GetType())
+        case 'eTypeUInt8', datatype = 'uint8';
+        case 'eTypeUInt16', datatype = 'uint16';
+        case 'eTypeFloat', datatype = 'single';
+        otherwise, error('Bad value for iDataSet.GetType()');
+    end
+    
+    % ... allocate memory ...
+    surf_mask_stack  = zeros([surf_mask.GetSizeX(), surf_mask.GetSizeY(), ...
+                              surf_mask.GetSizeZ()], datatype);
+    
+    % ... get the data ...
+    switch char(cur_surf_data.GetType())
+        case 'eTypeUInt8'
+            arr                 = surf_mask.GetDataVolumeAs1DArrayBytes(0, 0);
+            surf_mask_stack(:)  = typecast(arr, 'uint8');
+        case 'eTypeUInt16'
+            arr = surf_mask.GetDataVolumeAs1DArrayShorts(0, 0);
+            surf_mask_stack(:)  = typecast(arr, 'uint16');
+            surf_mask_stack(:)  = uint8(double(surf_mask_stack(:))./double(max(surf_mask_stack(:))).*255);
+            surf_mask_stack     = uint8(surf_mask_stack);            
+        case 'eTypeFloat'
+            surf_mask_stack(:)  = surf_mask.GetDataVolumeAs1DArrayFloats(0, 0);
+        otherwise
+            error('Bad value for type');
+    end
+    
+    % ... and flip x and y dimensions (Imaris (Java) vs. Matlab...)
+    surf_mask_stack = permute(surf_mask_stack, [2 1 3]);
+    
+    clear arr;
+    
+    if debugging
+        figure('Name', 'Data loaded');
+        pause(.1);
+    else
+        disp('Data successfully imported ...');
+    end
+    
+    
+    
+    %% Determine the voxel size
+    % ImarisXT does not offer to get the voxel size... so we have to calculate it
+    % 'cur_surf_data' should be an iDataSet
+    voxel_size_x = (cur_surf_data.GetExtendMaxY() - cur_surf_data.GetExtendMinY()) / ...
+                   (cur_surf_data.GetSizeY() - 1);
+    voxel_size_y = (cur_surf_data.GetExtendMaxX() - cur_surf_data.GetExtendMinX()) / ...
+                   (cur_surf_data.GetSizeX() - 1);
+    voxel_size_z = (cur_surf_data.GetExtendMaxZ() - cur_surf_data.GetExtendMinZ()) / ...
+                   (cur_surf_data.GetSizeZ() -1);
+    
+    voxel_size   = [voxel_size_x voxel_size_y voxel_size_z];        % in um
+    voxel_volume = voxel_size_x * voxel_size_y * voxel_size_z;      % in um^3
+
+    % Adjust CoG values to current reference frame
+    % A point at (0|0) corresponds after isosurface extraction to a point at (0.5|0.5)
+    CoGs_inside = [ CoGs_inside(:,1)  - cur_surf_data.GetExtendMinX() + 0.5 ...
+                    CoGs_inside(:,2)  - cur_surf_data.GetExtendMinY() + 0.5 ...
+                    CoGs_inside(:,3)  - cur_surf_data.GetExtendMinZ() + 0.5];
+    CoGs_outside = [CoGs_outside(:,1) - cur_surf_data.GetExtendMinX() + 0.5 ...
+                    CoGs_outside(:,2) - cur_surf_data.GetExtendMinY() + 0.5 ...
+                    CoGs_outside(:,3) - cur_surf_data.GetExtendMinZ() + 0.5];
+
+    save(fullfile(demo_data_path, 'demo_data.mat'));
+    return;
+end
 
 
 
@@ -115,165 +295,6 @@ subsampling_factor      = str2double(answer{3});
 results_saving_folder   = answer{4};
 results_file            = answer{5};
 excel_file_path         = fullfile(results_saving_folder, results_file);
-
-
-
-%% For debugging only
-show_interm_figures = 0;
-debugging           = 0;
-
-
-
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Set up connection between Imaris and MATLAB and get data
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% The Imaris server object should be passed to the plugin by Imaris. If
-% that didn't work somehow, look for the object
-if isa(aImarisApplicationID, 'Imaris.IApplicationPrxHelper')
-    vImarisApplication = aImarisApplicationID;
-else
-    % Connect to Imaris interface
-    javaaddpath ImarisLib.jar
-    vImarisLib = ImarisLib;
-    if ischar(aImarisApplicationID)
-        aImarisApplicationID = round(str2double(aImarisApplicationID));
-    end
-    vImarisApplication = vImarisLib.GetApplication(aImarisApplicationID);
-end
-
-
-% Get the Surfaces (ISurface objects in Imaris), volumes (IVolume objects 
-% in Imaris) and spots (ISpots objects in Imaris)
-surfaces    = {};   spots       = {};   volumes = {}; 
-nSurfaces   = 0;    nVolumes    = 0;    nSpots  = 0;
-
-% Get current scene objects from Imaris and find out what we got
-nChildren = vImarisApplication.GetSurpassScene().GetNumberOfChildren();
-for i = 0 : (nChildren - 1)
-    child = vImarisApplication.GetSurpassScene.GetChild( i );
-    if vImarisApplication.GetFactory().IsSurfaces(child)
-        nSurfaces = nSurfaces + 1;
-        % We must cast the child to a Surfaces object!
-        surfaces{nSurfaces} = ...
-            vImarisApplication.GetFactory().ToSurfaces(child);
-    end
-    if vImarisApplication.GetFactory().IsVolume(child)
-        nVolumes = nVolumes + 1;
-        % We must cast the child to a Volume object!
-        volumes{nVolumes} = ...
-            vImarisApplication.GetFactory().ToVolume(child);
-    end 
-    if vImarisApplication.GetFactory().IsSpots(child)
-        nSpots = nSpots + 1;
-        % We must cast the child to a Spots object!        
-        spots{nSpots} = ...
-            vImarisApplication.GetFactory().ToSpots(child);
-    end
-end
-
-
-
-%% The spots represent the nuclei. Get their Centers of Gravity (CoGs)
-CoGs = spots{1}.GetPositionsXYZ;
-
-% Get all spot class labels
-% IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
-%   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
-%   plugin cannot distinguish between the two otherwise. 
-tmp          = spots{1}.GetLabels;
-class_labels = cell(size(CoGs, 1), 1);
-CoGs_inside  = [];  % Class A
-CoGs_outside = [];  % Class B
-
-for CoG_cnt = 1:size(CoGs, 1)
-    class_labels{CoG_cnt} = tmp(CoG_cnt).mLabelValue;
-
-    if strcmp(tmp(CoG_cnt).mLabelValue, 'Class A')
-        CoGs_inside  = [CoGs_inside; CoGs(CoG_cnt,:)];
-    elseif strcmp(tmp(CoG_cnt).mLabelValue, 'Class B')
-        CoGs_outside = [CoGs_outside; CoGs(CoG_cnt,:)];
-    else
-        error('Class label not know. Has to be ''Class A'' for spots inside and ''Class B'' for spots outside the fiber.' );
-    end
-end
-
-
-
-%% Extract actual surface from Imaris ISurface object
-cur_surface     = surfaces{1};                          % ISurface
-% Get surface data (note that we need to use Java indexing now...)
-cur_surf_data   = cur_surface.GetSurfaceData(0);        % IDataSet
-% Get surface dimensions
-surface_layout  = cur_surface.GetSurfaceDataLayout(0);
-% Generate mask from data
-surf_mask       = cur_surface.GetMask(surface_layout.mExtendMinX, ...
-                                      surface_layout.mExtendMinY, ...
-                                      surface_layout.mExtendMinZ, ...
-                                      surface_layout.mExtendMaxX, ...
-                                      surface_layout.mExtendMaxY, ...
-                                      surface_layout.mExtendMaxZ, ...
-                                      surface_layout.mSizeX, ...
-                                      surface_layout.mSizeY, ...
-                                      surface_layout.mSizeZ, ...
-                                      0);               % IDataSet
-
-% Get the actual data out of the IDataSet object... 
-% ... first get the dataset class ...
-switch char(cur_surf_data.GetType())
-    case 'eTypeUInt8', datatype = 'uint8';
-    case 'eTypeUInt16', datatype = 'uint16';
-    case 'eTypeFloat', datatype = 'single';
-    otherwise, error('Bad value for iDataSet.GetType()');
-end
-
-% ... allocate memory ...
-surf_mask_stack  = zeros([surf_mask.GetSizeX(), surf_mask.GetSizeY(), ...
-                          surf_mask.GetSizeZ()], datatype);
-
-% ... get the data ...
-switch char(cur_surf_data.GetType())
-    case 'eTypeUInt8'
-        arr                 = surf_mask.GetDataVolumeAs1DArrayBytes(0, 0);
-        surf_mask_stack(:)  = typecast(arr, 'uint8');
-    case 'eTypeUInt16'
-        arr = surf_mask.GetDataVolumeAs1DArrayShorts(0, 0);
-        surf_mask_stack(:)  = typecast(arr, 'uint16');
-        surf_mask_stack(:)  = uint8(double(surf_mask_stack(:))./double(max(surf_mask_stack(:))).*255);
-        surf_mask_stack     = uint8(surf_mask_stack);            
-    case 'eTypeFloat'
-        surf_mask_stack(:)  = surf_mask.GetDataVolumeAs1DArrayFloats(0, 0);
-    otherwise
-        error('Bad value for type');
-end
-
-% ... and flip x and y dimensions (Imaris (Java) vs. Matlab...)
-surf_mask_stack = permute(surf_mask_stack, [2 1 3]);
-
-clear arr;
-
-if debugging
-    figure('Name', 'Data loaded');
-    pause(.1);
-else
-    disp('Data successfully imported ...');
-end
-
-
-
-%% Determine the voxel size
-% ImarisXT does not offer to get the voxel size... so we have to calculate it
-% 'cur_surf_data' should be an iDataSet
-voxel_size_x = (cur_surf_data.GetExtendMaxY() - cur_surf_data.GetExtendMinY()) / ...
-               (cur_surf_data.GetSizeY() - 1);
-voxel_size_y = (cur_surf_data.GetExtendMaxX() - cur_surf_data.GetExtendMinX()) / ...
-               (cur_surf_data.GetSizeX() - 1);
-voxel_size_z = (cur_surf_data.GetExtendMaxZ() - cur_surf_data.GetExtendMinZ()) / ...
-               (cur_surf_data.GetSizeZ() -1);
-
-voxel_size   = [voxel_size_x voxel_size_y voxel_size_z];        % in um
-voxel_volume = voxel_size_x * voxel_size_y * voxel_size_z;      % in um^3
 
 
 
@@ -342,14 +363,6 @@ z = z.*voxel_size(3).*subsampling_factor;
 voxel_loc_fiber = [x y z];
 
 
-% Adjust CoG values to current reference frame
-% A point at (0|0) corresponds after isosurface extraction to a point at (0.5|0.5)
-CoGs_inside = [ CoGs_inside(:,1)  - cur_surf_data.GetExtendMinX() + 0.5 ...
-                CoGs_inside(:,2)  - cur_surf_data.GetExtendMinY() + 0.5 ...
-                CoGs_inside(:,3)  - cur_surf_data.GetExtendMinZ() + 0.5];
-CoGs_outside = [CoGs_outside(:,1) - cur_surf_data.GetExtendMinX() + 0.5 ...
-                CoGs_outside(:,2) - cur_surf_data.GetExtendMinY() + 0.5 ...
-                CoGs_outside(:,3) - cur_surf_data.GetExtendMinZ() + 0.5];
 
 % Prepare results matrices used to store results for each CoG
 % All distance measures are in um, MNDS in um^2, MNDV in um^3

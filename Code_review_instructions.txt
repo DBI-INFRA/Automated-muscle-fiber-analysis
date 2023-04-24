@@ -1,0 +1,5 @@
+1.) Download muscleFibreAnalysis_for_review.m and demo_data.mat to a local folder
+2.) Open Matlab (preferably 2021b) and add folder to the path
+3.) Assign path_to_local_folder to the folder that you created
+4.) Run muscleFibreAnalysis_for_review([], path_to_local_folder)
+
