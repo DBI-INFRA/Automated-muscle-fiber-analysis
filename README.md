@@ -1,6 +1,12 @@
 #  Automated-muscle-fiber-analysis
 ## Imaris plugin developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen
 
+Image data:
+![Stained muscle fiber tip](Muscle_fiber_tip_stained.png)
+
+Analysis workflow demo:
+![Analysis workflow demo](Analysis_workflow_Imaris_Matlab.png)
+
 % function muscleFibreAnalysis(aImarisApplicationID)
 %
 %   Input:
