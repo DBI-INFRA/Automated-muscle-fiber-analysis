@@ -1,5 +1,5 @@
 #  Automated-muscle-fiber-analysis
-## Imaris plugin developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen
+## Matlab (The Mathworks) plugin for Imaris (Oxford Instruments), developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen
 
 ## Example image data:
 ![Stained muscle fiber tip](Muscle_fiber_tip_stained.png)
@@ -50,11 +50,11 @@ All analysis results are provided as Matlab figures and exported as PNG
 image files and Excel sheets. In addition, the following figures are 
 generated and exported:
 
-a. The fiber surface and the inside and outside nuclei
-b. The MNDS domains in different colors
-c. The MNDS domains, semi-transparent, and the MNDV sizes represented
+1. The fiber surface and the inside and outside nuclei
+2. The MNDS domains in different colors
+3. The MNDS domains, semi-transparent, and the MNDV sizes represented
    as spheres around the nuclei
-d. A 3D image stack with the MNDVs in different greyvalues
+4. A 3D image stack with the MNDVs in different greyvalues
 
 IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
 nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
