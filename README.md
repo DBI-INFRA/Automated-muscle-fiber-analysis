@@ -1,5 +1,5 @@
-# Automated-muscle-fiber-analysis
-Imaris plugin developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey
+#  Automated-muscle-fiber-analysis
+## Imaris plugin developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen
 
 % function muscleFibreAnalysis(aImarisApplicationID)
 %
