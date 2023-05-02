@@ -1,7 +1,8 @@
 #  Automated-muscle-fiber-analysis
-## Matlab (The Mathworks) plugin for Imaris (Oxford Instruments), developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen
+### Matlab (The Mathworks) plugin for Imaris (Oxford Instruments), developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen. 
+###The goal of this collaboration was to analyze various measures like the myonuclei density along the fiber or the size of the myonuclei domain (MND) from human muscle fiber images. The data segmentation was done manually in Imaris (Oxford Instruments), and the subsequential analysis and results visualization automatically in Matlab (The Mathworks).
 
-## Example image data:
+## Example image data. The colors indicate muscle cell cytoplasm (pink), the myonuclei (blue), the muscle cell membrane (red) and the nuclear envelope for external nuclei (green):
 ![Stained muscle fiber tip](Muscle_fiber_tip_stained.png)
 
 ## Analysis workflow demo:
