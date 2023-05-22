@@ -2,9 +2,6 @@
 ### Matlab (The Mathworks) plugin for Imaris (Oxford Instruments).
 Within the scope of a collaboration with researchers Christian Høgsbjerg and Abigail Mackey from the Institute of Sports Medicine Copenhagen, Bispebjerg Hospital, we developed a way to estimate the myonucleus density along human muscle fibers and to characterize the myonuclei domains (MND). The data segmentation was performed semi-automatically with Imaris followed by manual curation. The target measurements and results visualization were performed automatically from a Imaris XT Matlab module developed specifically for that purpose by DBI-INFRA Image Analysis Core Facility. 
 
-![Stained muscle fiber tip](Muscle_fiber_tip_stained_with_labels.png)
-### *Example image data*
-
 ![Analysis workflow demo](demo_process__230504.png)
 ### *Top row: Datasets of stained muscle fibers (pink: cell cytoplasm, blue: myonuclei and red: muscle cell membrane) were segmented semi-automatically in Imaris (Oxford Instruments) to extract the surface of the cytoplasm (grey, semi-transparent surface) as well as the centers of the nuclei (blue spheres). Middle and bottom row: Using an Imaris-Matlab bridge, the surface and the nuclei centers were imported into Matlab, to determine various measures like the nucleus density along the fiber or the myonuclear domain surface (MNDS). In addition, different ways of results visualization were implemented, e.g. the MNDS areas belonging to different nuclei.*
 
