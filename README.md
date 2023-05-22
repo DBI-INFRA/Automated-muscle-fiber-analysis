@@ -1,13 +1,15 @@
 #  Automated-muscle-fiber-analysis
-### Matlab (The Mathworks) plugin for Imaris (Oxford Instruments), developed within the scope of the collaboration between Christian Høgsbjerg and Abigail Mackey, Bispebjerg Hospital, Institute of Sports Medicine Copenhagen. 
+### Matlab (The Mathworks) plugin for Imaris (Oxford Instruments).
+Within the scope of a collaboration with researchers Christian Høgsbjerg and Abigail Mackey from the Institute of Sports Medicine Copenhagen, Bispebjerg Hospital, we developed a way to estimate the myonucleus density along human muscle fibers and to characterize the myonuclei domains (MND). The data segmentation was performed semi-automatically with Imaris followed by manual curation. The target measurements and results visualization were performed automatically from a Imaris XT Matlab module developed specifically for that purpose by DBI-INFRA Image Analysis Core Facility. 
 
 ### The goal of this collaboration was to analyze various measures like the myonuclei density along the fiber or the size of the myonuclei domain (MND) from human muscle fiber images. The data segmentation was done manually in Imaris (Oxford Instruments), and the subsequential analysis and results visualization automatically in Matlab (The Mathworks).
 
 ### *Example image data. The colors indicate muscle cell cytoplasm (pink), the myonuclei (blue), the muscle cell membrane (red) and the nuclear envelope for external nuclei (green):*
-![Stained muscle fiber tip](Muscle_fiber_tip_stained.png)
+![Stained muscle fiber tip](Muscle_fiber_tip_stained_with_labels.png)
 
-### *Analysis workflow demo:*
-![Analysis workflow demo](Analysis_workflow_Imaris_Matlab.png)
+### *Top row: Datasets of stained muscle fibers (pink: cell cytoplasm, blue: myonuclei and red: muscle cell membrane) were segmented semi-automatically in Imaris (Oxford Instruments) to extract the surface of the cytoplasm (grey, semi-transparent surface) as well as the centers of the nuclei (blue spheres). Middle and bottom row: Using an Imaris-Matlab bridge, the surface and the nuclei centers were imported into Matlab, to determine various measures like the nucleus density along the fiber or the myonuclear domain surface (MNDS). In addition, different ways of results visualization were implemented, e.g. the MNDS areas belonging to different nuclei.*
+![Analysis workflow demo](demo_process__230504.png)
+
 
 ### Function description
 function muscleFibreAnalysis(aImarisApplicationID)
