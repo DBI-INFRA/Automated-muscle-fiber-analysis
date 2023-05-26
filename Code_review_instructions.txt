@@ -4,5 +4,3 @@ https://alumni-my.sharepoint.com/:w:/g/personal/tmj555_ku_dk/EdZmaiEQ_mhMjfABJxJ
 3.) Open Matlab (preferably 2021b) and add folder to the path
 4.) Assign path_to_local_folder to the folder that you created
 5.) Run muscleFibreAnalysis_for_review([], path_to_local_folder)
-
-
