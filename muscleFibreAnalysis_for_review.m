@@ -39,6 +39,13 @@ function muscleFibreAnalysis_for_review(aImarisApplicationID, demo_data_path)
 %   8.) Inside nuclei density [count/um^3] 
 %       Number of inside nuclei per slice volume.
 %
+%   IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
+%   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
+%   plugin cannot distinguish between the two otherwise. In addition, the 
+%   scene should either include only one surface object, or the relevant 
+%   surface object should be the first in the list as Matlab simply takes 
+%   the first surface object in the scene it can find.
+%
 %   All analysis results are provided as Matlab figures and exported as PNG 
 %   image files and Excel sheets. In addition, the following figures are 
 %   generated and exported:
@@ -47,10 +54,6 @@ function muscleFibreAnalysis_for_review(aImarisApplicationID, demo_data_path)
 %   c.) The MNDS domains, semi-transparent, and the MNDV sizes represented
 %       as spheres around the nuclei
 %   d.) A 3D image stack with the MNDVs in different greyvalues
-%
-%   IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
-%   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
-%   plugin cannot distinguish between the two otherwise.
 %
 %
 % Version: 1.0
@@ -312,7 +315,9 @@ voxel_volume              = voxel_volume * subsampling_factor^3;
 surf_mask_stack_enlarged = zeros(size(surf_mask_stack) + 2, 'logical');
 surf_mask_stack_enlarged(2:end-1, 2:end-1, 2:end-1) = surf_mask_stack; 
 
-% Extract the fiber surface
+% Extract the fiber surface. Note that for all the measurements that are 
+% done in fact only the set of vertices is used. The face information will
+% exclusively be used for mesh visualization purposes.
 [x, y, z]   = meshgrid(1:size(surf_mask_stack_enlarged, 2), ...
                        1:size(surf_mask_stack_enlarged, 1), ...
                        1:size(surf_mask_stack_enlarged, 3)); 
@@ -658,6 +663,16 @@ clear fv_aligned_faces_2;
 % Fill CoG inside results matrix
 CoGs_inside_results(:, 5) = surface_per_label;
 
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%                         %%%
+%%%     FIGURES 1 & 2       %%%
+%%%                         %%%
+%%%     Plot MNDS areas     %%%
+%%%                         %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 % Prepare results plot. First generate face colors...
 color_increment = floor(255 / size(CoGs_inside_pca, 1));
 colorfield      = idx';
@@ -749,6 +764,14 @@ CoGs_inside_results(:, 6) = volumes_per_label;
 volumes_per_label_plotting                          = volumes_per_label;
 volumes_per_label_plotting(volumes_per_label == 0)  = 0.00000001;
 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%                         %%%
+%%%         FIGURE 2        %%%
+%%%                         %%%
+%%%   Add Nuclei to Fig. 2  %%%
+%%%                         %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 hold on;
 c = colormap('jet');
@@ -959,6 +982,11 @@ if save_results
 end
 
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%                         %%%
+%%% Plot remaining figures  %%%
+%%%                         %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Plot number of inside nuclei per slice
 figure;

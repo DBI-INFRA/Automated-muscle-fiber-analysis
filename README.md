@@ -45,6 +45,13 @@ muscleFibreAnalysis is a Matlab plugin for the Imaris software package
 8. Inside nuclei density [count/um^3] 
    Number of inside nuclei per slice volume.
 
+IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
+nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
+plugin cannot distinguish between the two otherwise. In addition, the 
+scene should either include only one surface object, or the relevant 
+surface object should be the first in the list as Matlab simply takes 
+the first surface object in the scene it can find.
+
 All analysis results are provided as Matlab figures and exported as PNG 
 image files and Excel sheets. In addition, the following figures are 
 generated and exported:
@@ -54,10 +61,6 @@ generated and exported:
 3. The MNDS domains, semi-transparent, and the MNDV sizes represented
    as spheres around the nuclei
 4. A 3D image stack with the MNDVs in different greyvalues
-
-IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
-nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
-plugin cannot distinguish between the two otherwise.
 
 Version: 1.0
 Author: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 03/23
@@ -71,3 +74,33 @@ workshop: http://www.scs2.net/next/files/courses/iic/ImarisXTCourse.pdf
 Note that the code for aligning the sample to the longitudinal axis is 
 based on: 'Kin Sung Chan (2023). Align/Rotate Point Cloud Along Z 
 direction based on PCA, MATLAB Central File Exchange. April 21, 2023.'
+
+
+### Plugin usage
+For Matlab plugins to be available in Imaris, the XTension module has to be 
+purchased (allowing Matlab, Python and ImageJ/Fiji plugins to be added).
+There are two alternative ways to use a Matlab plugin in Imaris, using Matlab
+scripts (which will then be compiled on-the-fly when running them) or compiled 
+executable file. For users who have administrator rights, and therefore can 
+start up Imaris as admin, can choose which approach to use. 
+Regular users are limited to using executables.
+
+Scripts and executables have to be placed in the Xtensions folder in the Imaris
+installation folder:
+ADD THIS HERE
+
+After that, they will be available in Imaris in the FILL THIS menu. Note that 
+executables and scripts are shown with different symbols in the menu.
+
+Finally, to get a plugin to run, the correct version of the Matlab Runtime
+Environment has to be installed on the system, so for the current version of 
+the plugin that is MCR 2022b. In addition, the MCR has to be added to the 
+MCR path in Imaris
+FILL THIS HERE
+
+
+
+
+
+
+
