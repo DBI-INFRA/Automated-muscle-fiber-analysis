@@ -67,36 +67,25 @@ Author: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 03/23
 Update: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 04/23
 Status: TESTING (Matlab version: 2022b, Imaris version: 10.0.0)
 
-Note that the code related to the Imaris bridge communication was in part
-developed by Aaron Ponti in 2012, as part of an Imaris-Matlab bridge
-workshop: http://www.scs2.net/next/files/courses/iic/ImarisXTCourse.pdf
+Note that the code related to the Imaris bridge communication was in part developed by Aaron Ponti in 2012, as part of an Imaris-Matlab bridge workshop: http://www.scs2.net/next/files/courses/iic/ImarisXTCourse.pdf
 
-Note that the code for aligning the sample to the longitudinal axis is 
-based on: 'Kin Sung Chan (2023). Align/Rotate Point Cloud Along Z 
-direction based on PCA, MATLAB Central File Exchange. April 21, 2023.'
+Note that the code for aligning the sample to the longitudinal axis is based on: 'Kin Sung Chan (2023). Align/Rotate Point Cloud Along Z direction based on PCA, MATLAB Central File Exchange. April 21, 2023.'
 
 
 ### Plugin usage
-For Matlab plugins to be available in Imaris, the XTension module has to be 
-purchased (allowing Matlab, Python and ImageJ/Fiji plugins to be added).
-There are two alternative ways to use a Matlab plugin in Imaris, using Matlab
-scripts (which will then be compiled on-the-fly when running them) or compiled 
-executable file. For users who have administrator rights, and therefore can 
-start up Imaris as admin, can choose which approach to use. 
-Regular users are limited to using executables.
+For Matlab plugins to be available in Imaris, the XTension module has to be purchased (allowing Matlab, Python and ImageJ/Fiji plugins to be added). There are two alternative ways to use a Matlab plugin in Imaris, using Matlab scripts (which will then be compiled on-the-fly when running them) or compiled executable file. For users who have administrator rights, and therefore can 
+start up Imaris as admin, can choose which approach to use. Regular users are limited to using executables.
 
-Scripts and executables have to be placed in the Xtensions folder in the Imaris
-installation folder:
-ADD THIS HERE
+Scripts have to be placed in the script XTensions folder (\XT\matlab) in the Imaris installation folder, e.g.:
+C:\Program files\Bitplane\Imaris 10.0.0\XT\matlab
 
-After that, they will be available in Imaris in the FILL THIS menu. Note that 
-executables and scripts are shown with different symbols in the menu.
+Executables have to be placed in the executables XTensions folder (\XT\rtmatlab) in the Imaris installation folder, e.g.:
+C:\Program files\Bitplane\Imaris 10.0.0\XT\rtmatlab
 
-Finally, to get a plugin to run, the correct version of the Matlab Runtime
-Environment has to be installed on the system, so for the current version of 
-the plugin that is MCR 2022b. In addition, the MCR has to be added to the 
-MCR path in Imaris
-FILL THIS HERE
+After that, they will be available in Imaris (in case the XTensions module is installed) in the 'Image Processing' menu. Note that executables and scripts are shown with different symbols in the menu (the scripts are only visible when Imaris is started with admin rights).
+
+To get a plugin to run, the correct version of the Matlab Runtime Environment has to be installed on the system, so for the current version of the plugin that is MCR 2022b and the MCR has to be added to the MCR path in Imaris (if that does not happen automatically): 'File -> Preferences -> CustomTools -> Matlab'. Finally, make sure that your XTensions folders (specified above) are in the list of 'XTensions Folders' at the bottom of the 'CustomTools' dialog.
+
 
 
 
