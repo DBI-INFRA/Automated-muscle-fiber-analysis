@@ -10,10 +10,13 @@ Within the scope of a collaboration with researchers Christian Høgsbjerg and Ab
 function muscleFibreAnalysis(ImarisID__or_demo_data_path)
 
 Input:
+
 aImarisApplicationID        Imaris server object, representing the
                             currently active scene in Imaris. 
                             The ID is provided by Imaris when calling 
                             the plugin.
+
+OR
 
 demo_data_path              Full path to file 'demo_data.mat', which
                             allows demoing the toolbox without the need
