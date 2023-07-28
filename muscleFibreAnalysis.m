@@ -1,13 +1,19 @@
 
-function muscleFibreAnalysis(aImarisApplicationID)
+function muscleFibreAnalysis(ImarisID__or_demo_data_path)
 %
-% function muscleFibreAnalysis(aImarisApplicationID)
+% function muscleFibreAnalysis(ImarisID__or_demo_data_path)
 %
-%   Input:
+%   Input can be one of the following:
 %   aImarisApplicationID        Imaris server object, representing the
 %                               currently active scene in Imaris. 
 %                               The ID is provided by Imaris when calling 
 %                               the plugin.
+%
+%   demo_data_path              Full path to file 'demo_data.mat', which
+%                               allows demoing the toolbox without the need
+%                               to have Imaris installed.
+%
+%    
 %
 % muscleFibreAnalysis is a Matlab plugin for the Imaris software package 
 %   (https://imaris.oxinst.com/open/). It queries the current scene for an
@@ -39,8 +45,12 @@ function muscleFibreAnalysis(aImarisApplicationID)
 %   8.) Inside nuclei density [count/um^3] 
 %       Number of inside nuclei per slice volume.
 %
-%   IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
-%   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
+%   IMPORTANT: The scene should only contain a single surface object and
+%   one object containing the nuclei, to ensure that the correct objects 
+%   are considered for analysis (the FIRST surface will be considered the 
+%   target and the rest will be).
+%   Nuclei inside the fiber should be labeled 'Class A' and nuclei outside 
+%   the fiber should be labeled 'Class B' in Imaris, as the
 %   plugin cannot distinguish between the two otherwise. In addition, the 
 %   scene should either include only one surface object, or the relevant 
 %   surface object should be the first in the list as Matlab simply takes 
@@ -58,7 +68,7 @@ function muscleFibreAnalysis(aImarisApplicationID)
 %
 % Version: 1.0
 % Author: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 03/23
-% Update: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 04/23
+% Update: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 07/23
 % Status: TESTING (Matlab version: 2022b, Imaris version: 10.0.0)
 %
 % Note that the code related to the Imaris bridge communication was in part
@@ -68,6 +78,9 @@ function muscleFibreAnalysis(aImarisApplicationID)
 % Note that the code for aligning the sample to the longitudinal axis is 
 % based on: 'Kin Sung Chan (2023). Align/Rotate Point Cloud Along Z 
 % direction based on PCA, MATLAB Central File Exchange. April 21, 2023.'
+%
+% Online documentation for the project:
+% https://alumni-my.sharepoint.com/:w:/g/personal/tmj555_ku_dk/EdZmaiEQ_mhMjfABJxJKGfABR6Zz-X5M_3gOBgFgEvpOiw?e=nbzaXn
 % ---------------------------------------------------------
 %
 %   Imaris header (compulsory for the plugin to be added to the menu):
@@ -92,192 +105,316 @@ function muscleFibreAnalysis(aImarisApplicationID)
 
 
 
-%% Ask user to provide a unique data ID, the slice thickness, a subsampling
-%  factor, a path to a folder to store results and the name of the Excel
-%  sheet where all data should be stored
+%% For debugging only
+show_interm_figures = false;
+debugging           = false;
+
+%% User input default parameters
 slice_thickness_default         = '15';   % in um
 subsampling_factor_default      = '1';
 results_saving_folder_default   = 'F:\Christian_H\Fiber_analysis\Results';
 results_file_default            = 'Christian_MTJ_MND_project_results.xlsx';
 
-answer  = inputdlg({'Unique ID', 'Slice thickness (um)', 'Subsampling', 'Results folder', 'Results Excel filename'}, ...
-                    'Specify parameters', [1 75], {'', slice_thickness_default, subsampling_factor_default, ...
-                    results_saving_folder_default, results_file_default});
 
-% If no ID was provided, an error occurs
-if isempty(answer{1})
-    f = errordlg('Please provide valide data ID!', ...
-                 'Data ID missing...' ); 
+
+
+%% Find out whether we are in demo mode or not and check input arguments
+if isstring(ImarisID__or_demo_data_path)
+    demo_mode = true;
+elseif isempty(ImarisID__or_demo_data_path)
+    f = errordlg('Input argument not valid. Provide valid ImarisID or full path to demo data!', ...
+                 'Invalid plugin input...' ); 
+    uiwait(f);
     return;
 else
-    data_ID            = answer(1);
+    demo_mode = false;
 end
 
-slice_thickness         = str2double(answer{2});
-subsampling_factor      = str2double(answer{3});
-results_saving_folder   = answer{4};
-results_file            = answer{5};
-excel_file_path         = fullfile(results_saving_folder, results_file);
 
-
-
-%% For debugging only
-show_interm_figures = 0;
-debugging           = 0;
-
-
-
-%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Set up connection between Imaris and MATLAB and get data
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% The Imaris server object should be passed to the plugin by Imaris. If
-% that didn't work somehow, look for the object
-if isa(aImarisApplicationID, 'Imaris.IApplicationPrxHelper')
-    vImarisApplication = aImarisApplicationID;
+%% If used for code review, the input argument is the path to the folder with
+%  the mat file including test data
+if demo_mode
+    demo_data_path = ImarisID__or_demo_data_path;
+    load(fullfile(demo_data_path, 'demo_data.mat'));
 else
-    % Connect to Imaris interface
-    javaaddpath ImarisLib.jar
-    vImarisLib = ImarisLib;
-    if ischar(aImarisApplicationID)
-        aImarisApplicationID = round(str2double(aImarisApplicationID));
-    end
-    vImarisApplication = vImarisLib.GetApplication(aImarisApplicationID);
-end
+    %%
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Set up connection between Imaris and MATLAB and get data
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    aImarisApplicationID = ImarisID__or_demo_data_path;
 
-
-% Get the Surfaces (ISurface objects in Imaris), volumes (IVolume objects 
-% in Imaris) and spots (ISpots objects in Imaris)
-surfaces    = {};   spots       = {};   volumes = {}; 
-nSurfaces   = 0;    nVolumes    = 0;    nSpots  = 0;
-
-% Get current scene objects from Imaris and find out what we got
-nChildren = vImarisApplication.GetSurpassScene().GetNumberOfChildren();
-for i = 0 : (nChildren - 1)
-    child = vImarisApplication.GetSurpassScene.GetChild( i );
-    if vImarisApplication.GetFactory().IsSurfaces(child)
-        nSurfaces = nSurfaces + 1;
-        % We must cast the child to a Surfaces object!
-        surfaces{nSurfaces} = ...
-            vImarisApplication.GetFactory().ToSurfaces(child);
-    end
-    if vImarisApplication.GetFactory().IsVolume(child)
-        nVolumes = nVolumes + 1;
-        % We must cast the child to a Volume object!
-        volumes{nVolumes} = ...
-            vImarisApplication.GetFactory().ToVolume(child);
-    end 
-    if vImarisApplication.GetFactory().IsSpots(child)
-        nSpots = nSpots + 1;
-        % We must cast the child to a Spots object!        
-        spots{nSpots} = ...
-            vImarisApplication.GetFactory().ToSpots(child);
-    end
-end
-
-
-
-%% The spots represent the nuclei. Get their Centers of Gravity (CoGs)
-CoGs = spots{1}.GetPositionsXYZ;
-
-% Get all spot class labels
-% IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
-%   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
-%   plugin cannot distinguish between the two otherwise. 
-tmp          = spots{1}.GetLabels;
-class_labels = cell(size(CoGs, 1), 1);
-CoGs_inside  = [];  % Class A
-CoGs_outside = [];  % Class B
-
-for CoG_cnt = 1:size(CoGs, 1)
-    class_labels{CoG_cnt} = tmp(CoG_cnt).mLabelValue;
-
-    if strcmp(tmp(CoG_cnt).mLabelValue, 'Class A')
-        CoGs_inside  = [CoGs_inside; CoGs(CoG_cnt,:)];
-    elseif strcmp(tmp(CoG_cnt).mLabelValue, 'Class B')
-        CoGs_outside = [CoGs_outside; CoGs(CoG_cnt,:)];
+    % The Imaris server object should be passed to the plugin by Imaris. If
+    % that didn't work somehow, look for the object
+    if isa(aImarisApplicationID, 'Imaris.IApplicationPrxHelper')
+        vImarisApplication = aImarisApplicationID;
     else
-        error('Class label not know. Has to be ''Class A'' for spots inside and ''Class B'' for spots outside the fiber.' );
+        % Connect to Imaris interface
+        javaaddpath ImarisLib.jar
+        vImarisLib = ImarisLib;
+        if ischar(aImarisApplicationID)
+            aImarisApplicationID = round(str2double(aImarisApplicationID));
+        end
+        vImarisApplication = vImarisLib.GetApplication(aImarisApplicationID);
     end
+    
+    
+    % Get the Surfaces (ISurface objects in Imaris), volumes (IVolume objects 
+    % in Imaris) and spots (ISpots objects in Imaris)
+    surfaces    = {};   spots       = {};   volumes = {}; 
+    nSurfaces   = 0;    nVolumes    = 0;    nSpots  = 0;
+    
+    % Get current scene objects from Imaris and find out what we got
+    nChildren = vImarisApplication.GetSurpassScene().GetNumberOfChildren();
+    for i = 0 : (nChildren - 1)
+        child = vImarisApplication.GetSurpassScene.GetChild( i );
+        if vImarisApplication.GetFactory().IsSurfaces(child)
+            nSurfaces = nSurfaces + 1;
+            % We must cast the child to a Surfaces object!
+            surfaces{nSurfaces} = ...
+                vImarisApplication.GetFactory().ToSurfaces(child);
+        end
+        if vImarisApplication.GetFactory().IsVolume(child)
+            nVolumes = nVolumes + 1;
+            % We must cast the child to a Volume object!
+            volumes{nVolumes} = ...
+                vImarisApplication.GetFactory().ToVolume(child);
+        end 
+        if vImarisApplication.GetFactory().IsSpots(child)
+            nSpots = nSpots + 1;
+            % We must cast the child to a Spots object!        
+            spots{nSpots} = ...
+                vImarisApplication.GetFactory().ToSpots(child);
+        end
+    end
+    
+    if nSurfaces == 0
+        f = errordlg('The Imaris scene does not contain any surface objects. Make sure to create one before using the plugin!', ...
+                 'No surface found...' ); 
+        uiwait(f);
+        return;
+    elseif nSurfaces > 1
+        f = warndlg('There are multiple surfaces in the Imaris scene. The first one will be considered for analysis.', ...
+                 'Multiple surfaces found...' ); 
+        uiwait(f);
+    end
+
+    if nSpots == 0
+        f = errordlg('The Imaris scene does not contain any spot objects. Make sure to create one before using the plugin!', ...
+                 'No spots found...' ); 
+        uiwait(f);
+        return;
+    elseif nSurfaces > 1
+        f = warndlg('There are multiple spot objects in the Imaris scene. The first one will be considered for analysis.', ...
+                 'Multiple spot objects found...' );
+        uiwait(f);
+    end    
+    
+    %% The spots represent the nuclei. Get their Centers of Gravity (CoGs)
+    CoGs = spots{1}.GetPositionsXYZ;
+    
+    % Get all spot class labels
+    % IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
+    %   nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
+    %   plugin cannot distinguish between the two otherwise. 
+    tmp          = spots{1}.GetLabels;
+    class_labels = cell(size(CoGs, 1), 1);
+    CoGs_inside  = [];  % Class A
+    CoGs_outside = [];  % Class B
+    
+    for CoG_cnt = 1:size(CoGs, 1)
+        class_labels{CoG_cnt} = tmp(CoG_cnt).mLabelValue;
+    
+        if strcmp(tmp(CoG_cnt).mLabelValue, 'Class A')
+            CoGs_inside  = [CoGs_inside; CoGs(CoG_cnt,:)];
+        elseif strcmp(tmp(CoG_cnt).mLabelValue, 'Class B')
+            CoGs_outside = [CoGs_outside; CoGs(CoG_cnt,:)];
+        else
+            f = errordlg('Class label not know. Has to be ''Class A'' for spots inside and ''Class B'' for spots outside the fiber.', ...
+                         'Wrong class labels...' );
+            uiwait(f);
+            return;
+        end
+    end
+    
+    
+    
+    %% Extract actual surface from Imaris ISurface object
+    cur_surface     = surfaces{1};                          % ISurface
+    % Get surface data (note that we need to use Java indexing now...)
+    cur_surf_data   = cur_surface.GetSurfaceData(0);        % IDataSet
+    % Get surface dimensions
+    surface_layout  = cur_surface.GetSurfaceDataLayout(0);
+    % Generate mask from data
+    surf_mask       = cur_surface.GetMask(surface_layout.mExtendMinX, ...
+                                          surface_layout.mExtendMinY, ...
+                                          surface_layout.mExtendMinZ, ...
+                                          surface_layout.mExtendMaxX, ...
+                                          surface_layout.mExtendMaxY, ...
+                                          surface_layout.mExtendMaxZ, ...
+                                          surface_layout.mSizeX, ...
+                                          surface_layout.mSizeY, ...
+                                          surface_layout.mSizeZ, ...
+                                          0);               % IDataSet
+    
+    % Get the actual data out of the IDataSet object... 
+    % ... first get the dataset class ...
+    switch char(cur_surf_data.GetType())
+        case 'eTypeUInt8', datatype = 'uint8';
+        case 'eTypeUInt16', datatype = 'uint16';
+        case 'eTypeFloat', datatype = 'single';
+        otherwise, error('Bad value for iDataSet.GetType()');
+    end
+    
+    % ... allocate memory ...
+    surf_mask_stack  = zeros([surf_mask.GetSizeX(), surf_mask.GetSizeY(), ...
+                              surf_mask.GetSizeZ()], datatype);
+    
+    % ... get the data ...
+    switch char(cur_surf_data.GetType())
+        case 'eTypeUInt8'
+            arr                 = surf_mask.GetDataVolumeAs1DArrayBytes(0, 0);
+            surf_mask_stack(:)  = typecast(arr, 'uint8');
+        case 'eTypeUInt16'
+            arr = surf_mask.GetDataVolumeAs1DArrayShorts(0, 0);
+            surf_mask_stack(:)  = typecast(arr, 'uint16');
+            surf_mask_stack(:)  = uint8(double(surf_mask_stack(:))./double(max(surf_mask_stack(:))).*255);
+            surf_mask_stack     = uint8(surf_mask_stack);            
+        case 'eTypeFloat'
+            surf_mask_stack(:)  = surf_mask.GetDataVolumeAs1DArrayFloats(0, 0);
+        otherwise
+            error('Bad value for type');
+    end
+    
+    % ... and flip x and y dimensions (Imaris (Java) vs. Matlab...)
+    surf_mask_stack = permute(surf_mask_stack, [2 1 3]);
+    
+    clear arr;
+    
+    if debugging
+        figure('Name', 'Data loaded');
+        pause(.1);
+    else
+        disp('Data successfully imported ...');
+    end
+    
+    
+    
+    %% Determine the voxel size
+    % ImarisXT does not offer to get the voxel size... so we have to calculate it
+    % 'cur_surf_data' should be an iDataSet
+    voxel_size_x = (cur_surf_data.GetExtendMaxY() - cur_surf_data.GetExtendMinY()) / ...
+                   (cur_surf_data.GetSizeY() - 1);
+    voxel_size_y = (cur_surf_data.GetExtendMaxX() - cur_surf_data.GetExtendMinX()) / ...
+                   (cur_surf_data.GetSizeX() - 1);
+    voxel_size_z = (cur_surf_data.GetExtendMaxZ() - cur_surf_data.GetExtendMinZ()) / ...
+                   (cur_surf_data.GetSizeZ() -1);
+    
+    voxel_size   = [voxel_size_x voxel_size_y voxel_size_z];        % in um
+    voxel_volume = voxel_size_x * voxel_size_y * voxel_size_z;      % in um^3
+
+    % Adjust CoG values to current reference frame
+    % A point at (0|0) corresponds after isosurface extraction to a point at (0.5|0.5)
+    CoGs_inside = [ CoGs_inside(:,1)  - cur_surf_data.GetExtendMinX() + 0.5 ...
+                    CoGs_inside(:,2)  - cur_surf_data.GetExtendMinY() + 0.5 ...
+                    CoGs_inside(:,3)  - cur_surf_data.GetExtendMinZ() + 0.5];
+    CoGs_outside = [CoGs_outside(:,1) - cur_surf_data.GetExtendMinX() + 0.5 ...
+                    CoGs_outside(:,2) - cur_surf_data.GetExtendMinY() + 0.5 ...
+                    CoGs_outside(:,3) - cur_surf_data.GetExtendMinZ() + 0.5];
+
+    %save(fullfile(demo_data_path, 'demo_data.mat'));
+    %return;
 end
 
 
 
-%% Extract actual surface from Imaris ISurface object
-cur_surface     = surfaces{1};                          % ISurface
-% Get surface data (note that we need to use Java indexing now...)
-cur_surf_data   = cur_surface.GetSurfaceData(0);        % IDataSet
-% Get surface dimensions
-surface_layout  = cur_surface.GetSurfaceDataLayout(0);
-% Generate mask from data
-surf_mask       = cur_surface.GetMask(surface_layout.mExtendMinX, ...
-                                      surface_layout.mExtendMinY, ...
-                                      surface_layout.mExtendMinZ, ...
-                                      surface_layout.mExtendMaxX, ...
-                                      surface_layout.mExtendMaxY, ...
-                                      surface_layout.mExtendMaxZ, ...
-                                      surface_layout.mSizeX, ...
-                                      surface_layout.mSizeY, ...
-                                      surface_layout.mSizeZ, ...
-                                      0);               % IDataSet
+%% Ask user to provide a unique data ID, the slice thickness, a subsampling
+%  factor, a path to a folder to store results and the name of the Excel
+%  sheet where all data should be stored
+valid_user_input = false;
 
-% Get the actual data out of the IDataSet object... 
-% ... first get the dataset class ...
-switch char(cur_surf_data.GetType())
-    case 'eTypeUInt8', datatype = 'uint8';
-    case 'eTypeUInt16', datatype = 'uint16';
-    case 'eTypeFloat', datatype = 'single';
-    otherwise, error('Bad value for iDataSet.GetType()');
-end
+while valid_user_input == false
+    answer  = inputdlg({'Unique ID (Characters, ''-'' and ''_'')', 'Slice thickness (um)', 'Subsampling', 'Results folder', 'Results Excel filename (Characters, ''-'', ''_'' and ''.'')'}, ...
+                        'Specify parameters', [1 75], {'', slice_thickness_default, subsampling_factor_default, ...
+                        results_saving_folder_default, results_file_default});
 
-% ... allocate memory ...
-surf_mask_stack  = zeros([surf_mask.GetSizeX(), surf_mask.GetSizeY(), ...
-                          surf_mask.GetSizeZ()], datatype);
+    % If no ID was provided, an error occurs
+    tmp = uint8(answer{1});
+    
+    % Check for valid inputs
+    if isempty(tmp)
+        f = errordlg('Unique ID input is empty. Provide valid ID!', ...
+                     'Empty ID...' ); 
+        uiwait(f);
+    elseif sum((tmp == 45) | (tmp == 95) | isstrprop(tmp, 'alphanum')) < length(tmp)
+        f = errordlg('Unique ID contains invalid characters. Provide valid ID!', ...
+                     'Invalid characters in ID...' ); 
+        uiwait(f);
+    else
+        data_ID             = answer{1};
+        valid_user_input    = true;
+    end
 
-% ... get the data ...
-switch char(cur_surf_data.GetType())
-    case 'eTypeUInt8'
-        arr                 = surf_mask.GetDataVolumeAs1DArrayBytes(0, 0);
-        surf_mask_stack(:)  = typecast(arr, 'uint8');
-    case 'eTypeUInt16'
-        arr = surf_mask.GetDataVolumeAs1DArrayShorts(0, 0);
-        surf_mask_stack(:)  = typecast(arr, 'uint16');
-        surf_mask_stack(:)  = uint8(double(surf_mask_stack(:))./double(max(surf_mask_stack(:))).*255);
-        surf_mask_stack     = uint8(surf_mask_stack);            
-    case 'eTypeFloat'
-        surf_mask_stack(:)  = surf_mask.GetDataVolumeAs1DArrayFloats(0, 0);
-    otherwise
-        error('Bad value for type');
-end
+    if valid_user_input
+        if isnan(str2double(answer{2})) || str2double(answer{2}) <= 0
+            f = errordlg('Slice thickness has to be numerical and larger than 0!', ...
+                         'Slice thickness not numerical or <= 0...' );
+            uiwait(f);
+            valid_user_input = false;
+        else
+            slice_thickness = str2double(answer{2});
+        end
+    end
 
-% ... and flip x and y dimensions (Imaris (Java) vs. Matlab...)
-surf_mask_stack = permute(surf_mask_stack, [2 1 3]);
+    tmp = str2double(answer{3});
+    if valid_user_input
+        if ((round(tmp) - tmp) == 0) && tmp > 0
+            subsampling_factor = tmp;
+        else
+            f = errordlg('Subsampling factor is not a valid integer. Must be an integer > 0!', ...
+                         'Subsampling factor not valid integer...' );
+            uiwait(f);
+            valid_user_input = false;
+        end
+    end
 
-clear arr;
+    if valid_user_input
+        if ischar(answer{4})
+            % Check whether results folder exists
+            if ~exist(answer{4}, 'dir')
+                f = errordlg('Results folder does not exist. Create folder!', ...
+                             'Results folder does not exist...' );
+                uiwait(f);
+                valid_user_input = false;                
+            else
+                results_saving_folder = answer{4};
+            end
+        else
+            f = errordlg('Results folder path not valid. Provide correct path!', ...
+                         'Invalid results folder path...' );
+            uiwait(f);
+            valid_user_input = false;
+        end
+    end    
 
-if debugging
-    figure('Name', 'Data loaded');
-    pause(.1);
-else
-    disp('Data successfully imported ...');
-end
+    tmp = uint8(answer{5});
+    if valid_user_input
+        if isempty(tmp)
+            f = errordlg('Excel filename is empty. Provide valid filename!', ...
+                         'Empty Excel filename...' );
+            uiwait(f);
+            valid_user_input  = False;
+        elseif sum((tmp == 45) | (tmp == 46) | (tmp == 95) | isstrprop(tmp, 'alphanum')) < length(tmp)
+            f = errordlg('Excel filename contains invalid characters. Provide a valid filename!', ...
+                         'Invalid characters in Excel filename...' );
+            uiwait(f);
+            valid_user_input  = false;
+        else
+            results_file = answer{5};
+        end
+    end
+end          
 
-
-
-%% Determine the voxel size
-% ImarisXT does not offer to get the voxel size... so we have to calculate it
-% 'cur_surf_data' should be an iDataSet
-voxel_size_x = (cur_surf_data.GetExtendMaxY() - cur_surf_data.GetExtendMinY()) / ...
-               (cur_surf_data.GetSizeY() - 1);
-voxel_size_y = (cur_surf_data.GetExtendMaxX() - cur_surf_data.GetExtendMinX()) / ...
-               (cur_surf_data.GetSizeX() - 1);
-voxel_size_z = (cur_surf_data.GetExtendMaxZ() - cur_surf_data.GetExtendMinZ()) / ...
-               (cur_surf_data.GetSizeZ() -1);
-
-voxel_size   = [voxel_size_x voxel_size_y voxel_size_z];        % in um
-voxel_volume = voxel_size_x * voxel_size_y * voxel_size_z;      % in um^3
-
+excel_file_path         = fullfile(results_saving_folder, results_file);
 
 
 %% Extract fiber surface
@@ -347,14 +484,6 @@ z = z.*voxel_size(3).*subsampling_factor;
 voxel_loc_fiber = [x y z];
 
 
-% Adjust CoG values to current reference frame
-% A point at (0|0) corresponds after isosurface extraction to a point at (0.5|0.5)
-CoGs_inside = [ CoGs_inside(:,1)  - cur_surf_data.GetExtendMinX() + 0.5 ...
-                CoGs_inside(:,2)  - cur_surf_data.GetExtendMinY() + 0.5 ...
-                CoGs_inside(:,3)  - cur_surf_data.GetExtendMinZ() + 0.5];
-CoGs_outside = [CoGs_outside(:,1) - cur_surf_data.GetExtendMinX() + 0.5 ...
-                CoGs_outside(:,2) - cur_surf_data.GetExtendMinY() + 0.5 ...
-                CoGs_outside(:,3) - cur_surf_data.GetExtendMinZ() + 0.5];
 
 % Prepare results matrices used to store results for each CoG
 % All distance measures are in um, MNDS in um^2, MNDV in um^3
@@ -654,7 +783,7 @@ CoGs_inside_results(:, 5) = surface_per_label;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%                         %%%
-%%%      FIGURES 1 & 2      %%%
+%%%     FIGURES 1 & 2       %%%
 %%%                         %%%
 %%%     Plot MNDS areas     %%%
 %%%                         %%%
@@ -1163,140 +1292,148 @@ end
 % Export results to Excel
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 if save_results
-    if exist(excel_file_path, 'file')
-        % Get CoG inside data, remove 'missing' cells and determine starting
-        % row for current block. If current data_ID already exists, overwrite
-        % that data block
-        xls_inside = readcell(excel_file_path, 'Sheet', 'Inside nuclei data');
-        [xls_inside, starting_row_CoGs_inside_results, ending_row_CoGs_inside_results] = ...
-                        remove_missing_cells_determine_starting_row(xls_inside, data_ID);
-    
-        % Get CoG outside data and ...
-        xls_outside = readcell(excel_file_path, 'Sheet', 'Outside nuclei data');
-        [xls_outside, starting_row_CoGs_outside_results, ending_row_CoGs_outside_results] = ...
-                        remove_missing_cells_determine_starting_row(xls_outside, data_ID);
-    
-        % Get inside slice data and ...
-        xls_inside_slice = readcell(excel_file_path, 'Sheet', 'Inside slice data');
-        [xls_inside_slice, starting_row_inside_slice_results, ~] = ...
-                        remove_missing_cells_determine_starting_row(xls_inside_slice, data_ID);
-    
-        % Get outside slice data and ...
-        xls_outside_slice = readcell(excel_file_path, 'Sheet', 'Outside slice data');
-        [xls_outside_slice, starting_row_outside_slice_results, ~] = ...
-                        remove_missing_cells_determine_starting_row(xls_outside_slice, data_ID);
-    else
-        slices_edges_positive = num2cell(0:slice_thickness:1500);   % in um
-        slices_edges_negative = num2cell(0:-slice_thickness:-1500); % in um
-    
-        xls_slices                                      = cell(6, size(slices_edges_positive, 2) + 1);
-    
-        xls_slices(1,1)                                 = {'Slice edges positive direction'};
-        xls_slices(2,1)                                 = {'Slice count'};
-        xls_slices(3,1)                                 = {'Edges'};
-        xls_slices(2,3:size(slices_edges_positive, 2) + 1)  = num2cell(1:(size(slices_edges_positive, 2)-1));
-        xls_slices(3,2:size(slices_edges_positive, 2) + 1)  = slices_edges_positive;
-    
-        xls_slices(4,1)                                 = {'Slice edges negative direction'};
-        xls_slices(5,1)                                 = {'Slice count'};
-        xls_slices(6,1)                                 = {'Edges'};    
-        xls_slices(5,3:size(slices_edges_negative, 2) + 1)  = num2cell(-1:-1:-(size(slices_edges_negative, 2)-1));
-        xls_slices(6,2:size(slices_edges_negative, 2) + 1)  = slices_edges_negative;
+    try
+        if exist(excel_file_path, 'file')
+            % Get CoG inside data, remove 'missing' cells and determine starting
+            % row for current block. If current data_ID already exists, overwrite
+            % that data block
+            xls_inside = readcell(excel_file_path, 'Sheet', 'Inside nuclei data');
+            [xls_inside, starting_row_CoGs_inside_results, ending_row_CoGs_inside_results] = ...
+                            remove_missing_cells_determine_starting_row(xls_inside, data_ID);
         
-        writecell(xls_slices, excel_file_path, 'Sheet', 'Slices');
-    
-    
-        xls_inside_slice        = cell(5, size(slice_edges_inside, 2) + 2);
-        xls_inside_slice(1,1:3) = [{'Data IDs'} {'Label'} {'Slice data'}];
-    
-        xls_outside_slice        = cell(4, size(slice_edges_outside, 2) + 2);
-        xls_outside_slice(1,1:3) = [{'Data IDs'} {'Label'} {'Slice data'}];
-    
-        xls_inside      = cell(size(CoGs_inside_results, 1) + 1, 8);
-        xls_inside(1,:) = [{'Data IDs'} {'Count'} {'Slice number'} {'Slice center'} ...
-                           {'Dist to fiber tip [um]'} {'MNDS [um^2]'} {'MNDV [um^3]'} ...
-                           {'Inside-Inside NN [um]'}];
-    
-        xls_outside      = cell(size(CoGs_outside_results, 1) + 1, 8);
-        xls_outside(1,:) = [{'Data IDs'} {'Count'} {'Slice number'} {'Slice center'} ...
-                            {'Dist to fiber tip [um]'} {'Outside-Outside NN [um]'} ...
-                            {'Outside-Inside NN [um]'} {'Outside-Fiber vertex NN [um]'}];
-    
-        starting_row_CoGs_inside_results   = 2;
-        starting_row_CoGs_outside_results  = 2;
-        starting_row_inside_slice_results  = 2;
-        starting_row_outside_slice_results = 2;
-    
-        ending_row_CoGs_inside_results  = 2 + size(CoGs_inside_results, 1) - 1;
-        ending_row_CoGs_outside_results = 2 + size(CoGs_outside_results, 1) - 1;
-    end
-    
-    error_occurred = 0;
-    
-    % In case an Excel sheets exist and the current dataID was used before, the
-    % program checks whether the size of the data block is the same as the
-    % current data block to be saved. If yes, the data is overwritten. If not,
-    % the dataID was used for another dataset before and in that case an error
-    % is rendered to make sure the results file is not corrupted.
-    if (ending_row_CoGs_inside_results - starting_row_CoGs_inside_results + 1) ~= ...
-       (size(CoGs_inside_results, 1)) && ~isnan(ending_row_CoGs_inside_results) 
-        f = errordlg(['Already existing data block in the Excel sheet with the current ID differs in size from the current result. ' ...
-               'Could it be that this ID was used before for another dataset?'], ...
-               'Possibly reuse of data ID ...' );
-        error_occurred = 1;
-    end
-    
-    if (ending_row_CoGs_outside_results - starting_row_CoGs_outside_results + 1) ~= ...
-            (size(CoGs_outside_results, 1)) && ~isnan(ending_row_CoGs_outside_results) && ~error_occurred
-        f = errordlg(['Already existing data block in the Excel sheet with the current ID differs in size from the current result. ' ...
-               'Could it be that this ID was used before for another dataset?'], ...
-               'Possibly reuse of data ID ...' );
-        error_occurred = 1;    
-    end
-    
-    if ~error_occurred
-        cur_row                     = starting_row_CoGs_inside_results;
-        xls_inside(cur_row:cur_row + size(CoGs_inside_results, 1) - 1, 1)     = data_ID;
-        xls_inside(cur_row:cur_row + size(CoGs_inside_results, 1) - 1, 2:end) = num2cell(CoGs_inside_results);
-    
-        cur_row                     = starting_row_CoGs_outside_results;
-        xls_outside(cur_row:cur_row + size(CoGs_outside_results, 1) - 1, 1)     = data_ID;
-        xls_outside(cur_row:cur_row + size(CoGs_outside_results, 1) - 1, 2:end) = num2cell(CoGs_outside_results);
+            % Get CoG outside data and ...
+            xls_outside = readcell(excel_file_path, 'Sheet', 'Outside nuclei data');
+            [xls_outside, starting_row_CoGs_outside_results, ending_row_CoGs_outside_results] = ...
+                            remove_missing_cells_determine_starting_row(xls_outside, data_ID);
         
-        writecell(xls_inside, excel_file_path, 'Sheet', 'Inside nuclei data');    
-        writecell(xls_outside, excel_file_path, 'Sheet', 'Outside nuclei data');    
-    
-        cur_row                                   = starting_row_inside_slice_results;
-        xls_inside_slice(cur_row:cur_row + 5, 1)  = data_ID;
-        xls_inside_slice(cur_row, 2)              = {'Slice count'};
-        xls_inside_slice(cur_row + 1, 2)          = {'Edges [um]'};
-        xls_inside_slice(cur_row + 2, 2)          = {'Slice center [um]'};
-        xls_inside_slice(cur_row + 3, 2)          = {'Nuclei per slice'};
-        xls_inside_slice(cur_row + 4, 2)          = {'Slice volume [um^3]'};
-        xls_inside_slice(cur_row + 5, 2)          = {'Slice nuclei density (nuclei per volume [um^3])'};
+            % Get inside slice data and ...
+            xls_inside_slice = readcell(excel_file_path, 'Sheet', 'Inside slice data');
+            [xls_inside_slice, starting_row_inside_slice_results, ~] = ...
+                            remove_missing_cells_determine_starting_row(xls_inside_slice, data_ID);
+        
+            % Get outside slice data and ...
+            xls_outside_slice = readcell(excel_file_path, 'Sheet', 'Outside slice data');
+            [xls_outside_slice, starting_row_outside_slice_results, ~] = ...
+                            remove_missing_cells_determine_starting_row(xls_outside_slice, data_ID);
+        else
+            slices_edges_positive = num2cell(0:slice_thickness:1500);   % in um
+            slices_edges_negative = num2cell(0:-slice_thickness:-1500); % in um
+        
+            xls_slices                                      = cell(6, size(slices_edges_positive, 2) + 1);
+        
+            xls_slices(1,1)                                 = {'Slice edges positive direction'};
+            xls_slices(2,1)                                 = {'Slice count'};
+            xls_slices(3,1)                                 = {'Edges'};
+            xls_slices(2,3:size(slices_edges_positive, 2) + 1)  = num2cell(1:(size(slices_edges_positive, 2)-1));
+            xls_slices(3,2:size(slices_edges_positive, 2) + 1)  = slices_edges_positive;
+        
+            xls_slices(4,1)                                 = {'Slice edges negative direction'};
+            xls_slices(5,1)                                 = {'Slice count'};
+            xls_slices(6,1)                                 = {'Edges'};    
+            xls_slices(5,3:size(slices_edges_negative, 2) + 1)  = num2cell(-1:-1:-(size(slices_edges_negative, 2)-1));
+            xls_slices(6,2:size(slices_edges_negative, 2) + 1)  = slices_edges_negative;
             
-        xls_inside_slice(cur_row, 4:(4 + size(slice_edges_inside, 2) - 2))       = num2cell(1:(size(slice_edges_inside, 2) - 1));
-        xls_inside_slice(cur_row + 1, 3:(3 + size(slice_edges_inside, 2) - 1))   = num2cell(slice_edges_inside);
-        xls_inside_slice(cur_row + 2, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell((slice_edges_inside(1:end-1) + slice_edges_inside(2:end))/2);
-        xls_inside_slice(cur_row + 3, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell(inside_nuclei_per_slice');
-        xls_inside_slice(cur_row + 4, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell(volume_per_slice');
-        xls_inside_slice(cur_row + 5, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell((inside_nuclei_per_slice./volume_per_slice)');
+            writecell(xls_slices, excel_file_path, 'Sheet', 'Slices');
         
         
-        cur_row                                     = starting_row_outside_slice_results;
-        xls_outside_slice(cur_row:cur_row + 5, 1)   = data_ID;
-        xls_outside_slice(cur_row, 2)               = {'Slice count'};
-        xls_outside_slice(cur_row + 1, 2)           = {'Edges [um]'};
-        xls_outside_slice(cur_row + 2, 2)           = {'Slice center [um]'};
-        xls_outside_slice(cur_row + 3, 2)           = {'Nuclei per slice'};
+            xls_inside_slice        = cell(5, size(slice_edges_inside, 2) + 2);
+            xls_inside_slice(1,1:3) = [{'Data IDs'} {'Label'} {'Slice data'}];
         
-        xls_outside_slice(cur_row, 4:(4 + size(slice_edges_outside, 2) - 2))     = num2cell(1:(size(slice_edges_outside, 2) - 1));
-        xls_outside_slice(cur_row + 1, 3:(3 + size(slice_edges_outside, 2) - 1)) = num2cell(slice_edges_outside);
-        xls_outside_slice(cur_row + 2, 4:(4 + size(slice_edges_outside, 2) - 2)) = num2cell((slice_edges_outside(1:end-1) + slice_edges_outside(2:end))/2);
-        xls_outside_slice(cur_row + 3, 4:(4 + size(slice_edges_outside, 2) - 2)) = num2cell(outside_nuclei_per_slice');
+            xls_outside_slice        = cell(4, size(slice_edges_outside, 2) + 2);
+            xls_outside_slice(1,1:3) = [{'Data IDs'} {'Label'} {'Slice data'}];
         
-        writecell(xls_inside_slice, excel_file_path, 'Sheet', 'Inside slice data');
-        writecell(xls_outside_slice, excel_file_path, 'Sheet', 'Outside slice data');
+            xls_inside      = cell(size(CoGs_inside_results, 1) + 1, 8);
+            xls_inside(1,:) = [{'Data IDs'} {'Count'} {'Slice number'} {'Slice center'} ...
+                               {'Dist to fiber tip [um]'} {'MNDS [um^2]'} {'MNDV [um^3]'} ...
+                               {'Inside-Inside NN [um]'}];
+        
+            xls_outside      = cell(size(CoGs_outside_results, 1) + 1, 8);
+            xls_outside(1,:) = [{'Data IDs'} {'Count'} {'Slice number'} {'Slice center'} ...
+                                {'Dist to fiber tip [um]'} {'Outside-Outside NN [um]'} ...
+                                {'Outside-Inside NN [um]'} {'Outside-Fiber vertex NN [um]'}];
+        
+            starting_row_CoGs_inside_results   = 2;
+            starting_row_CoGs_outside_results  = 2;
+            starting_row_inside_slice_results  = 2;
+            starting_row_outside_slice_results = 2;
+        
+            ending_row_CoGs_inside_results  = 2 + size(CoGs_inside_results, 1) - 1;
+            ending_row_CoGs_outside_results = 2 + size(CoGs_outside_results, 1) - 1;
+        end
+        
+        error_occurred = 0;
+        
+        % In case an Excel sheets exist and the current dataID was used before, the
+        % program checks whether the size of the data block is the same as the
+        % current data block to be saved. If yes, the data is overwritten. If not,
+        % the dataID was used for another dataset before and in that case an error
+        % is rendered to make sure the results file is not corrupted.
+        if (ending_row_CoGs_inside_results - starting_row_CoGs_inside_results + 1) ~= ...
+           (size(CoGs_inside_results, 1)) && ~isnan(ending_row_CoGs_inside_results) 
+            f = errordlg(['Already existing data block in the Excel sheet with the current ID differs in size from the current result. ' ...
+                   'This ID was used before for another dataset or the input data changed. Please save with another ID.'], ...
+                   'ID already used or input data changed ...' );
+            uiwait(f);
+            error_occurred = 1;
+        end
+        
+        if (ending_row_CoGs_outside_results - starting_row_CoGs_outside_results + 1) ~= ...
+                (size(CoGs_outside_results, 1)) && ~isnan(ending_row_CoGs_outside_results) && ~error_occurred
+            f = errordlg(['Already existing data block in the Excel sheet with the current ID differs in size from the current result. ' ...
+                   'This ID was used before for another dataset or the input data changed. Please save with another ID.'], ...
+                   'ID already used or input data changed ...' );
+            uiwait(f);
+            error_occurred = 1;    
+        end
+        
+        if ~error_occurred
+            cur_row                     = starting_row_CoGs_inside_results;
+            xls_inside(cur_row:cur_row + size(CoGs_inside_results, 1) - 1, 1)     = data_ID;
+            xls_inside(cur_row:cur_row + size(CoGs_inside_results, 1) - 1, 2:end) = num2cell(CoGs_inside_results);
+        
+            cur_row                     = starting_row_CoGs_outside_results;
+            xls_outside(cur_row:cur_row + size(CoGs_outside_results, 1) - 1, 1)     = data_ID;
+            xls_outside(cur_row:cur_row + size(CoGs_outside_results, 1) - 1, 2:end) = num2cell(CoGs_outside_results);
+            
+            writecell(xls_inside, excel_file_path, 'Sheet', 'Inside nuclei data');    
+            writecell(xls_outside, excel_file_path, 'Sheet', 'Outside nuclei data');    
+        
+            cur_row                                   = starting_row_inside_slice_results;
+            xls_inside_slice(cur_row:cur_row + 5, 1)  = data_ID;
+            xls_inside_slice(cur_row, 2)              = {'Slice count'};
+            xls_inside_slice(cur_row + 1, 2)          = {'Edges [um]'};
+            xls_inside_slice(cur_row + 2, 2)          = {'Slice center [um]'};
+            xls_inside_slice(cur_row + 3, 2)          = {'Nuclei per slice'};
+            xls_inside_slice(cur_row + 4, 2)          = {'Slice volume [um^3]'};
+            xls_inside_slice(cur_row + 5, 2)          = {'Slice nuclei density (nuclei per volume [um^3])'};
+                
+            xls_inside_slice(cur_row, 4:(4 + size(slice_edges_inside, 2) - 2))       = num2cell(1:(size(slice_edges_inside, 2) - 1));
+            xls_inside_slice(cur_row + 1, 3:(3 + size(slice_edges_inside, 2) - 1))   = num2cell(slice_edges_inside);
+            xls_inside_slice(cur_row + 2, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell((slice_edges_inside(1:end-1) + slice_edges_inside(2:end))/2);
+            xls_inside_slice(cur_row + 3, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell(inside_nuclei_per_slice');
+            xls_inside_slice(cur_row + 4, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell(volume_per_slice');
+            xls_inside_slice(cur_row + 5, 4:(4 + size(slice_edges_inside, 2) - 2))   = num2cell((inside_nuclei_per_slice./volume_per_slice)');
+            
+            
+            cur_row                                     = starting_row_outside_slice_results;
+            xls_outside_slice(cur_row:cur_row + 5, 1)   = data_ID;
+            xls_outside_slice(cur_row, 2)               = {'Slice count'};
+            xls_outside_slice(cur_row + 1, 2)           = {'Edges [um]'};
+            xls_outside_slice(cur_row + 2, 2)           = {'Slice center [um]'};
+            xls_outside_slice(cur_row + 3, 2)           = {'Nuclei per slice'};
+            
+            xls_outside_slice(cur_row, 4:(4 + size(slice_edges_outside, 2) - 2))     = num2cell(1:(size(slice_edges_outside, 2) - 1));
+            xls_outside_slice(cur_row + 1, 3:(3 + size(slice_edges_outside, 2) - 1)) = num2cell(slice_edges_outside);
+            xls_outside_slice(cur_row + 2, 4:(4 + size(slice_edges_outside, 2) - 2)) = num2cell((slice_edges_outside(1:end-1) + slice_edges_outside(2:end))/2);
+            xls_outside_slice(cur_row + 3, 4:(4 + size(slice_edges_outside, 2) - 2)) = num2cell(outside_nuclei_per_slice');
+            
+            writecell(xls_inside_slice, excel_file_path, 'Sheet', 'Inside slice data');
+            writecell(xls_outside_slice, excel_file_path, 'Sheet', 'Outside slice data');
+        end
+    catch
+        f = errordlg('Reading from, or writing to the Excel sheet failed. Make sure it is not used by another process.', ...
+                     'Excel access error ...' );
+        uiwait(f);        
     end
 end
 

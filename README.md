@@ -7,13 +7,18 @@ Within the scope of a collaboration with researchers Christian Høgsbjerg and Ab
 
 
 ### Function description
-function muscleFibreAnalysis(aImarisApplicationID)
+function muscleFibreAnalysis(ImarisID__or_demo_data_path)
 
 Input:
 aImarisApplicationID        Imaris server object, representing the
                             currently active scene in Imaris. 
                             The ID is provided by Imaris when calling 
                             the plugin.
+
+demo_data_path              Full path to file 'demo_data.mat', which
+                            allows demoing the toolbox without the need
+                            to have Imaris installed.
+
 
 muscleFibreAnalysis is a Matlab plugin for the Imaris software package 
   (https://imaris.oxinst.com/open/). It queries the current scene for an
@@ -45,12 +50,17 @@ muscleFibreAnalysis is a Matlab plugin for the Imaris software package
 8. Inside nuclei density [count/um^3] 
    Number of inside nuclei per slice volume.
 
-IMPORTANT: Nuclei inside the fiber should be labeled 'Class A' and 
-nuclei outside the fiber should be labeled 'Class B' in Imaris, as the
+IMPORTANT: The scene should only contain a single surface object and
+one object containing the nuclei, to ensure that the correct objects 
+are considered for analysis (the FIRST surface will be considered the 
+target and the rest will be).
+Nuclei inside the fiber should be labeled 'Class A' and nuclei outside 
+the fiber should be labeled 'Class B' in Imaris, as the
 plugin cannot distinguish between the two otherwise. In addition, the 
 scene should either include only one surface object, or the relevant 
 surface object should be the first in the list as Matlab simply takes 
 the first surface object in the scene it can find.
+
 
 All analysis results are provided as Matlab figures and exported as PNG 
 image files and Excel sheets. In addition, the following figures are 
@@ -64,7 +74,7 @@ generated and exported:
 
 Version: 1.0
 Author: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 03/23
-Update: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 04/23
+Update: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 07/23
 Status: TESTING (Matlab version: 2022b, Imaris version: 10.0.0)
 
 Note that the code related to the Imaris bridge communication was in part developed by Aaron Ponti in 2012, as part of an Imaris-Matlab bridge workshop: http://www.scs2.net/next/files/courses/iic/ImarisXTCourse.pdf
