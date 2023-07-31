@@ -104,7 +104,6 @@ function muscleFibreAnalysis(ImarisID__or_demo_data_path)
 %
 
 
-
 %% For debugging only
 show_interm_figures = false;
 debugging           = false;
@@ -119,15 +118,19 @@ results_file_default            = 'Christian_MTJ_MND_project_results.xlsx';
 
 
 %% Find out whether we are in demo mode or not and check input arguments
-if isstring(ImarisID__or_demo_data_path)
-    demo_mode = true;
-elseif isempty(ImarisID__or_demo_data_path)
+% Check if the string provided ends with '.mat'
+demo_mode = false;
+if isempty(ImarisID__or_demo_data_path)
     f = errordlg('Input argument not valid. Provide valid ImarisID or full path to demo data!', ...
                  'Invalid plugin input...' ); 
     uiwait(f);
     return;
-else
-    demo_mode = false;
+end
+
+if length(ImarisID__or_demo_data_path) >= 4
+    if strcmp(ImarisID__or_demo_data_path(end-3:end), '.mat')
+        demo_mode = true;
+    end
 end
 
 
@@ -135,7 +138,7 @@ end
 %  the mat file including test data
 if demo_mode
     demo_data_path = ImarisID__or_demo_data_path;
-    load(fullfile(demo_data_path, 'demo_data.mat'));
+    load(fullfile(demo_data_path));
 else
     %%
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -203,7 +206,7 @@ else
                  'No spots found...' ); 
         uiwait(f);
         return;
-    elseif nSurfaces > 1
+    elseif nSpots > 1
         f = warndlg('There are multiple spot objects in the Imaris scene. The first one will be considered for analysis.', ...
                  'Multiple spot objects found...' );
         uiwait(f);
@@ -321,7 +324,7 @@ else
                     CoGs_outside(:,2) - cur_surf_data.GetExtendMinY() + 0.5 ...
                     CoGs_outside(:,3) - cur_surf_data.GetExtendMinZ() + 0.5];
 
-    %save(fullfile(demo_data_path, 'demo_data.mat'));
+    %save(fullfile(demo_data_path));
     %return;
 end
 
@@ -337,6 +340,10 @@ while valid_user_input == false
                         'Specify parameters', [1 75], {'', slice_thickness_default, subsampling_factor_default, ...
                         results_saving_folder_default, results_file_default});
 
+    if isempty(answer)
+        return;
+    end
+
     % If no ID was provided, an error occurs
     tmp = uint8(answer{1});
     
@@ -350,7 +357,7 @@ while valid_user_input == false
                      'Invalid characters in ID...' ); 
         uiwait(f);
     else
-        data_ID             = answer{1};
+        data_ID             = answer(1);
         valid_user_input    = true;
     end
 
