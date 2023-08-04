@@ -238,8 +238,21 @@ else
             return;
         end
     end
+
+    if size(CoGs_inside, 1) < 2
+        f = errordlg('There should be at least two inside nuclei in the scene! Add more inside nuclei.', ...
+                     'Too few inside nuclei...' ); 
+        uiwait(f);
+        return;
+    end
     
-    
+    if size(CoGs_outside, 1) < 2
+        f = errordlg('There should be at least two outside nuclei in the scene! Add more outside nuclei.', ...
+                     'Too few outside nuclei...' ); 
+        uiwait(f);
+        return;
+    end
+        
     
     %% Extract actual surface from Imaris ISurface object
     cur_surface     = surfaces{1};                          % ISurface
@@ -655,7 +668,7 @@ for nucleus_cnt = 1:size(CoGs_outside_pca, 1)
     dist_outside_nuclei = [dist_outside_nuclei dist_tmp];
 end
 
-nucleus_outside_NNs       = min(dist_outside_nuclei);
+nucleus_outside_NNs       = min(dist_outside_nuclei, [], 1);
 mean_nucleus_outside_NNs  = mean(nucleus_outside_NNs);
 std_nucleus_outside_NNs   = std(nucleus_outside_NNs);
 
@@ -677,7 +690,7 @@ for nucleus_cnt = 1:size(CoGs_outside_pca, 1)
     dist_outside_inside_nuclei = [dist_outside_inside_nuclei dist_tmp];
 end
 
-nucleus_outside_inside_NNs      = min(dist_outside_inside_nuclei);
+nucleus_outside_inside_NNs      = min(dist_outside_inside_nuclei, [], 1);
 mean_nucleus_outside_inside_NNs = mean(nucleus_outside_inside_NNs);
 std_nucleus_outside_inside_NNs  = std(nucleus_outside_inside_NNs);
 
