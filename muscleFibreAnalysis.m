@@ -69,7 +69,7 @@ function muscleFibreAnalysis(ImarisID__or_demo_data_path)
 % Version: 1.0
 % Author: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 03/23
 % Update: Martin Baiker-Soerensen; DBI-IACF; Copenhagen University; 07/23
-% Status: TESTING (Matlab version: 2022b, Imaris version: 10.0.0)
+% Status: TESTING (Matlab version: 2021b, Imaris version: 10.0.0)
 %
 % Note that the code related to the Imaris bridge communication was in part
 % developed by Aaron Ponti in 2012, as part of an Imaris-Matlab bridge
